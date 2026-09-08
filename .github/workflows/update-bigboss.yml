@@ -1,0 +1,93 @@
+name: Update BigBoss Playlist
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download source playlist
+        env:
+          SOURCE_URL: ${{ secrets.PLAYLIST_URL }}
+          SOURCE_USER_AGENT: ${{ secrets.PLAYLIST_USER_AGENT }}
+        run: |
+          curl -L --fail --retry 3 \
+            -A "$SOURCE_USER_AGENT" \
+            "$SOURCE_URL" \
+            -o source.m3u
+
+      - name: Extract BigBoss entries
+        env:
+          SOURCE_USER_AGENT: ${{ secrets.PLAYLIST_USER_AGENT }}
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          src = Path("source.m3u").read_text(encoding="utf-8", errors="ignore")
+          lines = src.splitlines()
+
+          out = ["#EXTM3U"]
+          i = 0
+
+          while i < len(lines):
+              line = lines[i].strip()
+
+              if line.startswith("#EXTINF:") and "bigboss" in line.lower():
+                  out.append(line)
+
+                  # Copy any following header lines and the stream URL.
+                  j = i + 1
+                  while j < len(lines) and lines[j].strip().startswith("#"):
+                      out.append(lines[j].strip())
+                      j += 1
+
+                  if j < len(lines) and lines[j].strip():
+                      out.append(lines[j].strip())
+
+                  i = j
+              else:
+                  i += 1
+
+          # Remove exact duplicate blocks while preserving order.
+          result = []
+          seen = set()
+          block = []
+
+          for line in out[1:]:
+              if line.startswith("#EXTINF:") and block:
+                  key = "\n".join(block)
+                  if key not in seen:
+                      result.extend(block)
+                      seen.add(key)
+                  block = []
+              block.append(line)
+
+          if block:
+              key = "\n".join(block)
+              if key not in seen:
+                  result.extend(block)
+
+          Path("bigboss.m3u").write_text(
+              "#EXTM3U\n" + "\n".join(result) + "\n",
+              encoding="utf-8"
+          )
+          PY
+
+      - name: Commit updated playlist
+        run: |
+          rm -f source.m3u
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bigboss.m3u
+          git diff --cached --quiet || git commit -m "Update BigBoss playlist"
+          git push
