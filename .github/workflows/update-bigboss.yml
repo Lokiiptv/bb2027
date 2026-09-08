@@ -18,8 +18,8 @@ jobs:
 
       - name: Download source playlist
         env:
-          SOURCE_URL: ${{ secrets.PLAYLIST_URL }}
-          SOURCE_USER_AGENT: ${{ secrets.PLAYLIST_USER_AGENT }}
+          SOURCE_URL: https://premiumplugx.com/VIP/pluglist.php
+          SOURCE_USER_AGENT: OTT Navigator/1.6.7.4
         run: |
           curl -L --fail --retry 3 \
             -A "$SOURCE_USER_AGENT" \
@@ -27,8 +27,6 @@ jobs:
             -o source.m3u
 
       - name: Extract BigBoss entries
-        env:
-          SOURCE_USER_AGENT: ${{ secrets.PLAYLIST_USER_AGENT }}
         run: |
           python3 <<'PY'
           from pathlib import Path
